@@ -317,6 +317,38 @@ def index():
     return render_template_string(FORM_HTML, message=message, status=status, values=values)
 
 
+@app.route("/test-email", methods=["GET", "POST"])
+def test_email_route():
+    """Debug route to verify SMTP credentials instantly."""
+    if request.method == "POST":
+        email = request.form.get("email")
+        try:
+             # Create a dummy file to reuse the existing function
+             with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as tmp:
+                 tmp.write(b"This is a test email to verify credentials.")
+                 tmp_path = Path(tmp.name)
+                 tmp.close() # Ensure checks are flushed
+             
+             try:
+                 # Sending dummy file
+                 send_email_with_attachment(email, "TEST_SINGER", 1, 1, tmp_path)
+                 return f"Email sent successfully to {email}! Credentials work."
+             finally:
+                 if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+        except Exception as e:
+            return f"Failed to send email: {e}"
+            
+    return """
+    <h2>Test Email Configuration</h2>
+    <form method="post">
+        <label>Enter Email to Test:</label>
+        <input name="email" type="email" required placeholder="your.email@example.com" style="padding: 10px; width: 300px;">
+        <button type="submit" style="padding: 10px;">Test Now</button>
+    </form>
+    """
+
+
 if __name__ == "__main__":
     host = os.getenv("FLASK_HOST", "0.0.0.0")
     port = int(os.getenv("FLASK_PORT", "5000"))
