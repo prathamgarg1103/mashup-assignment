@@ -5,6 +5,7 @@ A robust Python application that creates a mashup of songs from a specific singe
 ![Python](https://img.shields.io/badge/Python-3.7%2B-blue)
 ![Flask](https://img.shields.io/badge/Flask-2.0%2B-green)
 ![Status](https://img.shields.io/badge/Status-Completed-success)
+[![Live Demo](https://img.shields.io/badge/Demo-Live%20App-orange)](https://mashup-assignment-9jvr.onrender.com)
 
 ## ✨ Features
 
