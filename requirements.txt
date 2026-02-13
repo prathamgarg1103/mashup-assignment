@@ -3,3 +3,5 @@ yt-dlp
 moviepy
 imageio-ffmpeg
 email-validator
+python-dotenv
+gunicorn

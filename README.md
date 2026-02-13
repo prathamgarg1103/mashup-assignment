@@ -1,86 +1,97 @@
 # Mashup Assignment
 
-This repo includes complete implementations for:
+This repository contains the solution for the Mashup assignment, consisting of a CLI tool and a Web Service.
 
-- Program 1: Command-line mashup generator (`102303052.py`)
-- Program 2: Flask web service (`app.py`) that emails the mashup ZIP
+## Prerequisites
 
-## Setup
+- Python 3.7+
+- FFmpeg (installed and added to system PATH)
 
-1. Create and activate a virtual environment.
-2. Install dependencies:
+## Installation
 
-```bash
-pip install -r requirements.txt
-```
+1.  Clone the repository.
+2.  Install dependencies:
+    ```bash
+    pip install -r requirements.txt
+    ```
 
-## Program 1 (CLI)
+## Configuration (For Web App)
 
-Usage:
+1.  Copy `.env.example` to `.env`.
+2.  Fill in your SMTP credentials (required for email functionality).
+
+    ```ini
+    SMTP_HOST=smtp.gmail.com
+    SMTP_PORT=587
+    SMTP_USERNAME=your_email@gmail.com
+    SMTP_PASSWORD=abcd-efgh-ijkl-mnop  # App Password, not login password
+    SENDER_EMAIL=your_email@gmail.com
+    ```
+
+## Usage
+
+### Program 1: Console App (CLI)
+
+Run the script from the command line:
 
 ```bash
 python 102303052.py <SingerName> <NumberOfVideos> <AudioDuration> <OutputFileName>
 ```
 
-Example:
-
+**Example:**
 ```bash
-python 102303052.py "Sharry Maan" 20 30 mashup.mp3
+python 102303052.py "Sharry Maan" 20 20 101556-output.mp3
 ```
 
-Input rules:
+- **SingerName**: Name of the singer to search.
+- **NumberOfVideos**: Number of videos to download (>10).
+- **AudioDuration**: Duration of each clip in seconds (>20).
+- **OutputFileName**: Output MP3 file name.
 
-- `NumberOfVideos` must be greater than 10.
-- `AudioDuration` must be greater than 20.
-- `OutputFileName` must end with `.mp3`.
+### Program 2: Web Service
 
-What it does:
+1.  Start the Flask app:
+    ```bash
+    python app.py
+    ```
+2.  Open your browser and navigate to `http://127.0.0.1:5000`.
+3.  Fill in the form and submit.
+4.  The process runs in the background. You will receive an email with the ZIP file once completed.
 
-1. Downloads N YouTube videos for the singer.
-2. Extracts audio and trims first Y seconds from each.
-3. Merges all snippets into a single MP3 output.
+## Hosting on Render.com (Recommended)
 
-## Program 2 (Web Service)
+I have included a `render.yaml` file to make deployment automatic.
 
-Run:
+1.  **Push to GitHub**:
+    - Create a new repository on GitHub.
+    - Push all files in this folder to that repository.
+    
+    ```bash
+    git init
+    git add .
+    git commit -m "Initial commit"
+    git branch -M main
+    git remote add origin <your-repo-url>
+    git push -u origin main
+    ```
 
-```bash
-python app.py
-```
+2.  **Deploy on Render**:
+    - Sign up/Login to [Render.com](https://render.com/).
+    - Click **New +** and select **Blueprint**.
+    - Connect your GitHub account and select the repository you just created.
+    - Render will automatically detect the `render.yaml` file.
+    - Click **Apply**.
 
-Open:
+3.  **Configure Environment Variables**:
+    - In the Render dashboard for your new service, go to the **Environment** tab.
+    - You must manually enter the values for:
+        - `SMTP_USERNAME` (Your email)
+        - `SMTP_PASSWORD` (Your App Password)
+        - `SENDER_EMAIL` (Your email)
+        - `SMTP_HOST` (smtp.gmail.com)
+    - The other variables are already set by the blueprint, but double-check them.
 
-```text
-http://127.0.0.1:5000
-```
+4.  **Done!**: Your app will be live at `https://<service-name>.onrender.com`.
 
-Form fields:
-
-- Singer name
-- Number of videos
-- Duration of each clip
-- Email ID
-
-The service generates mashup audio, zips it, and sends it by email.
-
-### SMTP Configuration (Required for email sending)
-
-Set these environment variables before running `app.py`:
-
-- `SMTP_USERNAME` (your SMTP login/email)
-- `SMTP_PASSWORD` (SMTP password or app password)
-
-Optional:
-
-- `SMTP_HOST` (default: `smtp.gmail.com`)
-- `SMTP_PORT` (default: `587`)
-- `SMTP_USE_TLS` (default: `true`)
-- `SENDER_EMAIL` (default: value of `SMTP_USERNAME`)
-
-PowerShell example:
-
-```powershell
-$env:SMTP_USERNAME="your_email@gmail.com"
-$env:SMTP_PASSWORD="your_app_password"
-python app.py
-```
+## License
+MIT

@@ -4,6 +4,7 @@ import smtplib
 import subprocess
 import sys
 import tempfile
+import threading
 import zipfile
 from email.message import EmailMessage
 from pathlib import Path
@@ -11,6 +12,13 @@ from typing import Tuple
 
 from email_validator import EmailNotValidError, validate_email
 from flask import Flask, render_template_string, request
+
+# Try to load .env file if python-dotenv is installed
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 app = Flask(__name__)
 
@@ -90,12 +98,17 @@ FORM_HTML = """
       color: #991b1b;
       border: 1px solid #fca5a5;
     }
+    .msg.info {
+        background: #e0f2fe;
+        color: #0369a1;
+        border: 1px solid #7dd3fc;
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>Mashup Assignment - Program 2</h1>
-    <p class="note">Enter singer, video count, clip duration, and destination email. A ZIP file will be mailed after generation.</p>
+    <p class="note">Enter singer, video count, clip duration, and destination email. A ZIP file will be mailed after generation. <strong>Processing happens in the background.</strong></p>
     <form method="post">
       <label for="singer_name">Singer Name</label>
       <input id="singer_name" name="singer_name" value="{{ values.singer_name }}" required>
@@ -156,6 +169,10 @@ def create_zip_file(source_file: Path) -> Path:
 
 
 def run_cli_mashup(singer_name: str, number_of_videos: int, audio_duration: int, output_file: Path) -> None:
+    # Ensure CLI script exists
+    if not CLI_SCRIPT.exists():
+         raise RuntimeError(f"CLI script not found at {CLI_SCRIPT}")
+
     command = [
         sys.executable,
         str(CLI_SCRIPT),
@@ -164,10 +181,15 @@ def run_cli_mashup(singer_name: str, number_of_videos: int, audio_duration: int,
         str(audio_duration),
         str(output_file),
     ]
+    # Capture output for debugging logs if needed
+    print(f"Starting CLI command: {' '.join(command)}")
     completed = subprocess.run(command, capture_output=True, text=True, check=False)
+    
     if completed.returncode != 0:
         details = completed.stderr.strip() or completed.stdout.strip() or "Unknown CLI failure."
+        print(f"CLI Error: {details}")
         raise RuntimeError(f"Mashup generation failed: {details}")
+    print(f"CLI completed successfully: {output_file}")
 
 
 def send_email_with_attachment(
@@ -185,11 +207,12 @@ def send_email_with_attachment(
     use_tls = os.getenv("SMTP_USE_TLS", "true").lower() in {"1", "true", "yes"}
 
     if not smtp_username or not smtp_password:
-        raise RuntimeError(
-            "SMTP credentials not configured. Set SMTP_USERNAME and SMTP_PASSWORD."
-        )
+        print("Error: SMTP credentials missing. Cannot send email.")
+        return # Cannot send email, but logged error.
+
     if not sender_email:
-        raise RuntimeError("Sender email is missing. Set SENDER_EMAIL or SMTP_USERNAME.")
+        print("Error: SENDER_EMAIL missing.")
+        return
 
     message = EmailMessage()
     message["Subject"] = "Mashup Assignment Output"
@@ -202,20 +225,51 @@ def send_email_with_attachment(
         f"Clip duration: {audio_duration} seconds\n"
     )
 
-    with attachment_path.open("rb") as file_obj:
-        data = file_obj.read()
-    message.add_attachment(
-        data,
-        maintype="application",
-        subtype="zip",
-        filename=attachment_path.name,
-    )
+    try:
+        with attachment_path.open("rb") as file_obj:
+            data = file_obj.read()
+        message.add_attachment(
+            data,
+            maintype="application",
+            subtype="zip",
+            filename=attachment_path.name,
+        )
 
-    with smtplib.SMTP(host=smtp_host, port=smtp_port, timeout=120) as smtp:
-        if use_tls:
-            smtp.starttls()
-        smtp.login(smtp_username, smtp_password)
-        smtp.send_message(message)
+        print(f"Sending email to {receiver_email}...")
+        with smtplib.SMTP(host=smtp_host, port=smtp_port, timeout=120) as smtp:
+            if use_tls:
+                smtp.starttls()
+            smtp.login(smtp_username, smtp_password)
+            smtp.send_message(message)
+        print("Email sent successfully.")
+    except Exception as e:
+        print(f"Failed to send email: {e}")
+
+
+def process_mashup_request(singer_name, number_of_videos, audio_duration, email):
+    """Background task to run mashup and email result."""
+    temp_dir = Path(tempfile.mkdtemp(prefix="mashup_web_"))
+    try:
+        print(f"Processing request for {email} / {singer_name}")
+        output_mp3 = temp_dir / "mashup_output.mp3"
+        run_cli_mashup(singer_name, number_of_videos, audio_duration, output_mp3)
+        
+        if output_mp3.exists():
+            zip_file = create_zip_file(output_mp3)
+            send_email_with_attachment(
+                receiver_email=email,
+                singer_name=singer_name,
+                number_of_videos=number_of_videos,
+                audio_duration=audio_duration,
+                attachment_path=zip_file,
+            )
+        else:
+             print("Error: Output MP3 file was not created by CLI.")
+
+    except Exception as exc:
+        print(f"Background processing error: {exc}")
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 @app.route("/", methods=["GET", "POST"])
@@ -236,26 +290,29 @@ def index():
             "audio_duration": request.form.get("audio_duration", ""),
             "email": request.form.get("email", ""),
         }
-        temp_dir = Path(tempfile.mkdtemp(prefix="mashup_web_"))
+        
         try:
             singer_name, number_of_videos, audio_duration, email = parse_form(request.form)
-            output_mp3 = temp_dir / "mashup_output.mp3"
-            run_cli_mashup(singer_name, number_of_videos, audio_duration, output_mp3)
-            zip_file = create_zip_file(output_mp3)
-            send_email_with_attachment(
-                receiver_email=email,
-                singer_name=singer_name,
-                number_of_videos=number_of_videos,
-                audio_duration=audio_duration,
-                attachment_path=zip_file,
+            # Start background thread
+            thread = threading.Thread(
+                target=process_mashup_request,
+                args=(singer_name, number_of_videos, audio_duration, email),
+                daemon=True
             )
-            message = f"Success: mashup ZIP has been emailed to {email}."
-            status = "success"
-        except Exception as exc:
-            message = f"Error: {exc}"
+            thread.start()
+            
+            message = (
+                f"Request initiated for singer '{singer_name}'. "
+                f"We are processing {number_of_videos} videos. "
+                f"You will receive an email at {email} with the ZIP file shortly."
+            )
+            status = "info" # Use info/success color
+        except ValueError as exc:
+            message = f"Input Error: {exc}"
             status = "error"
-        finally:
-            shutil.rmtree(temp_dir, ignore_errors=True)
+        except Exception as exc:
+            message = f"System Error: {exc}"
+            status = "error"
 
     return render_template_string(FORM_HTML, message=message, status=status, values=values)
 
@@ -264,4 +321,5 @@ if __name__ == "__main__":
     host = os.getenv("FLASK_HOST", "0.0.0.0")
     port = int(os.getenv("FLASK_PORT", "5000"))
     debug = os.getenv("FLASK_DEBUG", "false").lower() in {"1", "true", "yes"}
+    print(f"Starting Flask app on {host}:{port}")
     app.run(host=host, port=port, debug=debug)

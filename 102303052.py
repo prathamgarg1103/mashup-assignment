@@ -32,6 +32,11 @@ def build_parser() -> MashupArgumentParser:
 
 
 def parse_args(argv: List[str]) -> argparse.Namespace:
+    # Allow help to work
+    if "-h" in argv or "--help" in argv:
+        parser = build_parser()
+        return parser.parse_args(argv)
+
     if len(argv) != 4:
         raise ValueError(
             "Incorrect number of parameters.\n"
@@ -75,14 +80,13 @@ def configure_ffmpeg() -> None:
 def download_videos(singer_name: str, number_of_videos: int, download_dir: Path) -> List[Path]:
     from yt_dlp import YoutubeDL
 
-    query = f"ytsearch{number_of_videos}:{singer_name} songs"
+    print(f"Downloading {number_of_videos} videos for: {singer_name}...")
     ydl_options = {
-        "format": "best[height<=360][ext=mp4]/best[height<=360]/worst[ext=mp4]/worst",
+        "format": "bestaudio/best",
         "noplaylist": True,
         "quiet": True,
         "no_warnings": True,
         "ignoreerrors": True,
-        "restrictfilenames": True,
         "outtmpl": str(download_dir / "%(title).80s-%(id)s.%(ext)s"),
     }
 
@@ -94,79 +98,80 @@ def download_videos(singer_name: str, number_of_videos: int, download_dir: Path)
         key=lambda path: path.stat().st_mtime,
     )
     if len(downloaded) < number_of_videos:
-        raise RuntimeError(
-            f"Could only download {len(downloaded)} videos, requested {number_of_videos}. "
-            "Try a more popular singer name or run again."
-        )
+        # Just warn if we have at least some, otherwise error
+        if len(downloaded) == 0:
+             raise RuntimeError(f"Could not download any videos for {singer_name}.")
+        print(f"Warning: Only downloaded {len(downloaded)} videos.")
+    
     return downloaded[:number_of_videos]
 
 
 def trim_clip(audio_clip, end_time: float):
-    if hasattr(audio_clip, "subclip"):
+    # Handle different moviepy versions
+    try:
+        return audio_clip.subclipped(0, end_time)
+    except AttributeError:
         return audio_clip.subclip(0, end_time)
-    return audio_clip.subclipped(0, end_time)
 
 
-def create_merged_audio(video_files: List[Path], audio_duration: int, output_path: Path) -> None:
+def create_merged_audio(files: List[Path], audio_duration: int, output_path: Path) -> None:
+    print("Processing audio clips...")
     try:
-        from moviepy import VideoFileClip, concatenate_audioclips
+        from moviepy.editor import AudioFileClip, concatenate_audioclips
     except ImportError:
-        from moviepy.editor import VideoFileClip, concatenate_audioclips
+        # Try newer moviepy structure if available
+        try:
+           from moviepy import AudioFileClip, concatenate_audioclips
+        except ImportError:
+            raise ImportError("moviepy is not installed correctly.")
 
-    video_clips = []
-    audio_snippets = []
-    merged_audio = None
+    clips = []
     try:
-        for video_file in video_files:
-            video_clip = VideoFileClip(str(video_file))
-            video_clips.append(video_clip)
-            if video_clip.audio is None:
-                continue
-
-            available_duration = float(video_clip.audio.duration or 0.0)
-            clip_end = min(float(audio_duration), available_duration)
-            if clip_end <= 0:
-                continue
-
-            snippet = trim_clip(video_clip.audio, clip_end)
-            audio_snippets.append(snippet)
-
-        if not audio_snippets:
-            raise RuntimeError("No valid audio clips found in downloaded videos.")
-
-        merged_audio = concatenate_audioclips(audio_snippets)
-        merged_audio.write_audiofile(
-            str(output_path),
-            codec="mp3",
-            bitrate="192k",
-            logger=None,
-        )
-    finally:
-        if merged_audio is not None:
-            merged_audio.close()
-        for snippet in audio_snippets:
+        for file_path in files:
             try:
-                snippet.close()
-            except Exception:
-                pass
-        for clip in video_clips:
+                clip = AudioFileClip(str(file_path))
+                # If clip is shorter than requested duration, take it all
+                duration = min(float(audio_duration), clip.duration)
+                sub = trim_clip(clip, duration)
+                clips.append(sub)
+            except Exception as e:
+                print(f"Skipping file {file_path.name} due to error: {e}")
+                continue
+
+        if not clips:
+            raise RuntimeError("No valid audio clips to merge.")
+
+        print(f"Merging {len(clips)} clips...")
+        final_clip = concatenate_audioclips(clips)
+        final_clip.write_audiofile(
+            str(output_path),
+            codec="libmp3lame",  # explicit mp3 codec
+            bitrate="192k",
+            logger=None, # reduce terminal noise
+        )
+        final_clip.close()
+    finally:
+        for clip in clips:
             try:
                 clip.close()
-            except Exception:
+            except:
                 pass
 
 
 def run_mashup(singer_name: str, number_of_videos: int, audio_duration: int, output_path: Path) -> Path:
     configure_ffmpeg()
     working_dir = Path(tempfile.mkdtemp(prefix="mashup_cli_"))
-    download_dir = working_dir / "videos"
+    download_dir = working_dir / "downloads"
     download_dir.mkdir(parents=True, exist_ok=True)
     try:
         video_files = download_videos(singer_name, number_of_videos, download_dir)
         create_merged_audio(video_files, audio_duration, output_path)
         return output_path
     finally:
-        shutil.rmtree(working_dir, ignore_errors=True)
+        try:
+             shutil.rmtree(working_dir, ignore_errors=True)
+        except Exception:
+             pass
 
 
 def main(argv: List[str]) -> int:
