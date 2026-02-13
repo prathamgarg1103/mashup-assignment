@@ -1,114 +1,104 @@
-# Mashup Assignment
+# 🎵 Mashup Assignment
 
-This repository contains the solution for the Mashup assignment, consisting of a CLI tool and a Web Service.
+A robust Python application that creates a mashup of songs from a specific singer by downloading videos from YouTube, trimming them, and merging them into a single audio file. This project includes both a **Command Line Interface (CLI)** and a **Web Service**.
 
-## Prerequisites
+![Python](https://img.shields.io/badge/Python-3.7%2B-blue)
+![Flask](https://img.shields.io/badge/Flask-2.0%2B-green)
+![Status](https://img.shields.io/badge/Status-Completed-success)
 
+## ✨ Features
+
+- **Download & Process**: Automatically downloads N videos of a singer from YouTube.
+- **Audio Processing**: Extracts audio, trims to Y seconds, and merges them.
+- **Background Processing**: Web app handles long-running tasks asynchronously to prevent timeouts.
+- **Email Delivery**: Sends the final mashup (zipped) directly to your email.
+- **Robust Error Handling**: Retries downloads and handles API failures gracefully.
+- **Deployment Ready**: Configured for **Render** (recommended) and Vercel.
+
+---
+
+## 🚀 Quick Start (Local)
+
+### Prerequisites
 - Python 3.7+
-- FFmpeg (installed and added to system PATH)
+- FFmpeg (must be added to system PATH)
 
-## Installation
+### Installation
 
-1.  Clone the repository.
-2.  Install dependencies:
+1.  **Clone the repository**:
+    ```bash
+    git clone https://github.com/prathamgarg1103/mashup-assignment.git
+    cd mashup-assignment
+    ```
+
+2.  **Install dependencies**:
     ```bash
     pip install -r requirements.txt
     ```
 
-## Configuration (For Web App)
-
-1.  Copy `.env.example` to `.env`.
-2.  Fill in your SMTP credentials (required for email functionality).
-
+3.  **Environment Setup**:
+    Create a `.env` file (copy from `.env.example`) and add your SMTP credentials:
     ```ini
+    SMTP_USERNAME=your_email@gmail.com
+    SMTP_PASSWORD=abcd-efgh-ijkl-mnop  # Google App Password
+    SENDER_EMAIL=your_email@gmail.com
     SMTP_HOST=smtp.gmail.com
     SMTP_PORT=587
-    SMTP_USERNAME=your_email@gmail.com
-    SMTP_PASSWORD=abcd-efgh-ijkl-mnop  # App Password, not login password
-    SENDER_EMAIL=your_email@gmail.com
     ```
 
-## Usage
+### Usage
 
-### Program 1: Console App (CLI)
-
-Run the script from the command line:
-
+#### Option 1: CLI Tool
+Run the script directly from your terminal:
 ```bash
-python 102303052.py <SingerName> <NumberOfVideos> <AudioDuration> <OutputFileName>
+# Syntax: python 102303052.py <Singer> <Count> <Duration> <OutputParams>
+python 102303052.py "Arijit Singh" 20 30 output.mp3
 ```
 
-**Example:**
+#### Option 2: Web App
+Start the Flask server:
 ```bash
-python 102303052.py "Sharry Maan" 20 20 101556-output.mp3
+python app.py
 ```
+Visit `http://localhost:5000` in your browser.
 
-- **SingerName**: Name of the singer to search.
-- **NumberOfVideos**: Number of videos to download (>10).
-- **AudioDuration**: Duration of each clip in seconds (>20).
-- **OutputFileName**: Output MP3 file name.
+---
 
-### Program 2: Web Service
+## 🌐 Deployment
 
-1.  Start the Flask app:
-    ```bash
-    python app.py
-    ```
-2.  Open your browser and navigate to `http://127.0.0.1:5000`.
-3.  Fill in the form and submit.
-4.  The process runs in the background. You will receive an email with the ZIP file once completed.
+### ✅ Method 1: Render (Highly Recommended)
+Render supports long-running background tasks, which are essential for processing video mashups.
 
-## Hosting on Render.com (Recommended)
+1.  **Fork/Clone** this repo to your GitHub.
+2.  Sign up on [Render.com](https://render.com).
+3.  Click **New +** -> **Blueprint**.
+4.  Connect your repository.
+5.  Render will auto-detect the `render.yaml` configuration. Click **Apply**.
+6.  **Important**: Go to the **Environment** tab of your new service and add these variables:
+    - `SMTP_USERNAME`: (Your Email)
+    - `SMTP_PASSWORD`: (Your App Password)
+    - `SENDER_EMAIL`: (Your Email)
+    - `SMTP_HOST`: `smtp.gmail.com`
+    - `SMTP_PORT`: `587`
 
-I have included a `render.yaml` file to make deployment automatic.
+### ⚠️ Method 2: Vercel
+**Note**: Vercel has a 10s timeout for serverless functions. This app may fail to process large mashups on Vercel.
 
-1.  **Push to GitHub**:
-    - Create a new repository on GitHub.
-    - Push all files in this folder to that repository.
-    
-    ```bash
-    git init
-    git add .
-    git commit -m "Initial commit"
-    git branch -M main
-    git remote add origin <your-repo-url>
-    git push -u origin main
-    ```
+1.  Import project to Vercel.
+2.  Add the same Environment Variables in Project Settings.
+3.  Deploy.
 
-2.  **Deploy on Render**:
-    - Sign up/Login to [Render.com](https://render.com/).
-    - Click **New +** and select **Blueprint**.
-    - Connect your GitHub account and select the repository you just created.
-    - Render will automatically detect the `render.yaml` file.
-    - Click **Apply**.
+---
 
-3.  **Configure Environment Variables**:
-    - In the Render dashboard for your new service, go to the **Environment** tab.
-    - You must manually enter the values for:
-        - `SMTP_USERNAME` (Your email)
-        - `SMTP_PASSWORD` (Your App Password)
-        - `SENDER_EMAIL` (Your email)
-        - `SMTP_HOST` (smtp.gmail.com)
-    - The other variables are already set by the blueprint, but double-check them.
+## 🛠 Troubleshooting
 
-4.  **Done!**: Your app will be live at `https://<service-name>.onrender.com`.
+- **Email not received?**
+    - Check your Spam folder.
+    - Verify your `SMTP_PASSWORD` is a valid Google App Password, not your login password.
+    - Use the debug route `/test-email` on your deployed app to test credentials instantly.
+- **Processing fails?**
+    - Ensure `ffmpeg` is installed correctly locally.
+    - On Render, this is handled automatically by the environment.
 
-## Hosting on Vercel
-
-> [!WARNING]
-> **Timeout Limitations**: Vercel Serverless Functions have a default timeout of 10 seconds (up to 60s on Pro). Downloading and processing 10+ videos takes longer than this. The request might time out before the background thread completes, or the thread might be killed when the response is sent. **Render is highly recommended for this assignment.**
-
-If you still want to deploy to Vercel:
-
-1.  **Push to GitHub** (same steps as above).
-2.  **Deploy on Vercel**:
-    - Sign up at [https://vercel.com](https://vercel.com).
-    - Import your GitHub repository.
-    - Vercel will detect `vercel.json`.
-3.  **Environment Variables**:
-    - In the project settings on Vercel, go to **Settings > Environment Variables**.
-    - Add `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, and `SENDER_EMAIL` individually.
-4.  **Deploy**.
-
-## License
+## 📜 License
 MIT
