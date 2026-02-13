@@ -11,7 +11,8 @@ from pathlib import Path
 from typing import Tuple
 
 from email_validator import EmailNotValidError, validate_email
-from flask import Flask, render_template_string, request
+from flask import Flask, render_template_string, request, send_from_directory
+import time
 
 # Try to load .env file if python-dotenv is installed
 try:
@@ -246,16 +247,24 @@ def send_email_with_attachment(
         print(f"Failed to send email: {e}")
 
 
-def process_mashup_request(singer_name, number_of_videos, audio_duration, email):
+# Global directory for results (persists as long as app runs)
+STATIC_RESULTS_DIR = Path("static_results")
+STATIC_RESULTS_DIR.mkdir(exist_ok=True)
+
+def process_mashup_request(singer_name, number_of_videos, audio_duration, email, file_id):
     """Background task to run mashup and email result."""
     temp_dir = Path(tempfile.mkdtemp(prefix="mashup_web_"))
     try:
         print(f"Processing request for {email} / {singer_name}")
-        output_mp3 = temp_dir / "mashup_output.mp3"
-        run_cli_mashup(singer_name, number_of_videos, audio_duration, output_mp3)
         
-        if output_mp3.exists():
-            zip_file = create_zip_file(output_mp3)
+        # We generate a .mp4 for the preview
+        output_file = temp_dir / file_id
+        
+        run_cli_mashup(singer_name, number_of_videos, audio_duration, output_file)
+        
+        if output_file.exists():
+            # 1. Create ZIP for email
+            zip_file = create_zip_file(output_file)
             send_email_with_attachment(
                 receiver_email=email,
                 singer_name=singer_name,
@@ -263,14 +272,62 @@ def process_mashup_request(singer_name, number_of_videos, audio_duration, email)
                 audio_duration=audio_duration,
                 attachment_path=zip_file,
             )
+            
+            # 2. Move MP4 to static folder for preview
+            shutil.move(str(output_file), str(STATIC_RESULTS_DIR / file_id))
+            print(f"Video available at {STATIC_RESULTS_DIR / file_id}")
+            
         else:
-             print("Error: Output MP3 file was not created by CLI.")
+             print("Error: Output file was not created by CLI.")
 
     except Exception as exc:
         print(f"Background processing error: {exc}")
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
+
+@app.route("/result/<filename>")
+def result(filename):
+    """Serve the result page with video player."""
+    # Security check: filename must be simple
+    if "/" in filename or "\\" in filename:
+        return "Invalid filename", 400
+    
+    return render_template_string("""
+    <!doctype html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <title>Mashup Ready</title>
+      <style>
+        body { font-family: Arial, sans-serif; background: #f1f5f9; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .container { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center; max-width: 800px; width: 90%; }
+        h1 { color: #0f172a; margin-bottom: 20px; }
+        video { width: 100%; border-radius: 8px; margin-top: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .btn { display: inline-block; margin-top: 20px; padding: 12px 24px; background: #0ea5e9; color: white; text-decoration: none; border-radius: 6px; font-weight: bold; }
+        .btn:hover { background: #0284c7; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <h1>Your Mashup is Ready! 🎵</h1>
+        <p>It has been emailed to you. You can also watch a preview here:</p>
+        <video controls autoplay>
+            <source src="/download/{{ filename }}" type="video/mp4">
+            Your browser does not support the video tag.
+        </video>
+        <br>
+        <a href="/" class="btn">Create Another</a>
+      </div>
+    </body>
+    </html>
+    """, filename=filename)
+
+@app.route("/download/<path:filename>")
+def download_file(filename):
+    """Serve the generated video file."""
+    return send_from_directory(STATIC_RESULTS_DIR, filename)
 
 @app.route("/", methods=["GET", "POST"])
 def index():
@@ -293,20 +350,25 @@ def index():
         
         try:
             singer_name, number_of_videos, audio_duration, email = parse_form(request.form)
+            
+            # Generate ID for video
+            file_id = f"{int(time.time())}_{abs(hash(singer_name))}.mp4"
+            
             # Start background thread
             thread = threading.Thread(
                 target=process_mashup_request,
-                args=(singer_name, number_of_videos, audio_duration, email),
+                args=(singer_name, number_of_videos, audio_duration, email, file_id),
                 daemon=True
             )
             thread.start()
             
             message = (
                 f"Request initiated for singer '{singer_name}'. "
-                f"We are processing {number_of_videos} videos. "
-                f"You will receive an email at {email} with the ZIP file shortly."
+                f"We are creating a <strong>video preview</strong> and emailing the zip. "
+                f"<br><br>👉 <strong><a href='/result/{file_id}'>Click here to watch the Video Preview</a></strong> "
+                f"(Please wait ~1 minute for generation)."
             )
-            status = "info" # Use info/success color
+            status = "info"
         except ValueError as exc:
             message = f"Input Error: {exc}"
             status = "error"

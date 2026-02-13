@@ -56,8 +56,8 @@ def validate_inputs(args: argparse.Namespace) -> Path:
         raise ValueError("AudioDuration must be greater than 20 seconds.")
 
     output_path = Path(args.output_file).expanduser()
-    if output_path.suffix.lower() != ".mp3":
-        raise ValueError("OutputFileName must end with .mp3")
+    if output_path.suffix.lower() not in [".mp3", ".mp4"]:
+        raise ValueError("OutputFileName must end with .mp3 (or .mp4 for video)")
     if output_path.parent != Path("."):
         output_path.parent.mkdir(parents=True, exist_ok=True)
     return output_path.resolve()
@@ -98,7 +98,6 @@ def download_videos(singer_name: str, number_of_videos: int, download_dir: Path)
         key=lambda path: path.stat().st_mtime,
     )
     if len(downloaded) < number_of_videos:
-        # Just warn if we have at least some, otherwise error
         if len(downloaded) == 0:
              raise RuntimeError(f"Could not download any videos for {singer_name}.")
         print(f"Warning: Only downloaded {len(downloaded)} videos.")
@@ -114,14 +113,13 @@ def trim_clip(audio_clip, end_time: float):
         return audio_clip.subclip(0, end_time)
 
 
-def create_merged_audio(files: List[Path], audio_duration: int, output_path: Path) -> None:
-    print("Processing audio clips...")
+def create_merged_video(files: List[Path], audio_duration: int, output_path: Path) -> None:
+    print("Processing clips...")
     try:
-        from moviepy.editor import AudioFileClip, concatenate_audioclips
+        from moviepy.editor import AudioFileClip, concatenate_audioclips, ColorClip, ImageClip
     except ImportError:
-        # Try newer moviepy structure if available
         try:
-           from moviepy import AudioFileClip, concatenate_audioclips
+           from moviepy import AudioFileClip, concatenate_audioclips, ColorClip, ImageClip
         except ImportError:
             raise ImportError("moviepy is not installed correctly.")
 
@@ -130,7 +128,6 @@ def create_merged_audio(files: List[Path], audio_duration: int, output_path: Pat
         for file_path in files:
             try:
                 clip = AudioFileClip(str(file_path))
-                # If clip is shorter than requested duration, take it all
                 duration = min(float(audio_duration), clip.duration)
                 sub = trim_clip(clip, duration)
                 clips.append(sub)
@@ -141,21 +138,57 @@ def create_merged_audio(files: List[Path], audio_duration: int, output_path: Pat
         if not clips:
             raise RuntimeError("No valid audio clips to merge.")
 
-        print(f"Merging {len(clips)} clips...")
-        final_clip = concatenate_audioclips(clips)
-        final_clip.write_audiofile(
-            str(output_path),
-            codec="libmp3lame",  # explicit mp3 codec
-            bitrate="192k",
-            logger=None, # reduce terminal noise
-        )
-        final_clip.close()
+        print(f"Merging {len(clips)} audio clips...")
+        final_audio = concatenate_audioclips(clips)
+        
+        # Create video
+        print("Creating video file...")
+        # Use a simple color background (blue-ish) or generate one
+        # 720p resolution
+        try:
+             video = ColorClip(size=(1280, 720), color=(14, 165, 233), duration=final_audio.duration)
+        except Exception:
+             # Fallback for older moviepy
+             video = ColorClip(size=(1280, 720), col=(14, 165, 233), duration=final_audio.duration)
+             
+        video = video.set_audio(final_audio)
+        
+        # Determine output format. If extension is .mp3, we still force .mp4 content but name it .mp3? 
+        # Requirement said output file must be .mp3 in CLI args. 
+        # But user wants video preview.
+        # Strategy: CLI still creates requested file (MP3). 
+        # BUT for the web app, we might need a separate function.
+        # Actually, let's keep CLI doing standard MP3 for the assignment requirement.
+        # And add a NEW function for the web app to trigger video creation.
+        
+        # WAIT: The assignment requires Program 1 to make an output file. 
+        # I shouldn't break the CLI contract. 
+        # I will modify this function to support BOTH if needed, or keeping it MP3 for CLI.
+        
+        # Reverting to MP3 for standard execution, but allowing MP4 if extension is .mp4
+        if output_path.suffix.lower() == ".mp4":
+            video.write_videofile(
+                str(output_path),
+                fps=1, # Low FPS for static image to save size/time
+                codec="libx264",
+                audio_codec="aac",
+                logger=None,
+            )
+        else:
+            final_audio.write_audiofile(
+                str(output_path),
+                codec="libmp3lame",
+                bitrate="192k",
+                logger=None,
+            )
+
+        final_audio.close()
+        video.close()
+
     finally:
         for clip in clips:
-            try:
-                clip.close()
-            except:
-                pass
+             try: clip.close() 
+             except: pass
 
 
 def run_mashup(singer_name: str, number_of_videos: int, audio_duration: int, output_path: Path) -> Path:
@@ -165,7 +198,7 @@ def run_mashup(singer_name: str, number_of_videos: int, audio_duration: int, out
     download_dir.mkdir(parents=True, exist_ok=True)
     try:
         video_files = download_videos(singer_name, number_of_videos, download_dir)
-        create_merged_audio(video_files, audio_duration, output_path)
+        create_merged_video(video_files, audio_duration, output_path)
         return output_path
     finally:
         try:
