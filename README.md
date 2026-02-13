@@ -93,5 +93,22 @@ I have included a `render.yaml` file to make deployment automatic.
 
 4.  **Done!**: Your app will be live at `https://<service-name>.onrender.com`.
 
+## Hosting on Vercel
+
+> [!WARNING]
+> **Timeout Limitations**: Vercel Serverless Functions have a default timeout of 10 seconds (up to 60s on Pro). Downloading and processing 10+ videos takes longer than this. The request might time out before the background thread completes, or the thread might be killed when the response is sent. **Render is highly recommended for this assignment.**
+
+If you still want to deploy to Vercel:
+
+1.  **Push to GitHub** (same steps as above).
+2.  **Deploy on Vercel**:
+    - Sign up at [https://vercel.com](https://vercel.com).
+    - Import your GitHub repository.
+    - Vercel will detect `vercel.json`.
+3.  **Environment Variables**:
+    - In the project settings on Vercel, go to **Settings > Environment Variables**.
+    - Add `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, and `SENDER_EMAIL` individually.
+4.  **Deploy**.
+
 ## License
 MIT
