@@ -1,4 +1,5 @@
+Flask
 yt-dlp
-pydub
 moviepy
-flask
+imageio-ffmpeg
+email-validator
