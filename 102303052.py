@@ -88,7 +88,6 @@ def download_videos(singer_name: str, number_of_videos: int, download_dir: Path)
         "no_warnings": True,
         "ignoreerrors": True,
         "outtmpl": str(download_dir / "%(title).80s-%(id)s.%(ext)s"),
-        "cookiesfrombrowser": ("chrome",),  # Try to use Chrome cookies
         "extractor_args": {
             "youtube": {
                 "player_client": ["android", "ios"]
