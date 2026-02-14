@@ -169,7 +169,7 @@ def create_zip_file(source_file: Path) -> Path:
     return zip_path
 
 
-def run_cli_mashup(singer_name: str, number_of_videos: int, audio_duration: int, output_file: Path) -> None:
+def run_cli_mashup(singer_name: str, number_of_videos: int, audio_duration: int, output_file: Path, file_id: str = None) -> None:
     # Ensure CLI script exists
     if not CLI_SCRIPT.exists():
          raise RuntimeError(f"CLI script not found at {CLI_SCRIPT}")
@@ -184,12 +184,36 @@ def run_cli_mashup(singer_name: str, number_of_videos: int, audio_duration: int,
     ]
     # Capture output for debugging logs if needed
     print(f"Starting CLI command: {' '.join(command)}")
-    completed = subprocess.run(command, capture_output=True, text=True, check=False)
     
-    if completed.returncode != 0:
-        details = completed.stderr.strip() or completed.stdout.strip() or "Unknown CLI failure."
+    # Use Popen to stream output
+    process = subprocess.Popen(
+        command, 
+        stdout=subprocess.PIPE, 
+        stderr=subprocess.STDOUT, 
+        text=True, 
+        bufsize=1, 
+        universal_newlines=True
+    )
+
+    # Read output line by line
+    for line in process.stdout:
+        line = line.strip()
+        if not line: continue
+        print(f"CLI: {line}") # Log to console
+        
+        # Check for progress tags
+        if "[PROGRESS]" in line and file_id:
+            msg = line.replace("[PROGRESS]", "").strip()
+            update_status(file_id, "Processing", msg)
+        elif "Downloading" in line and file_id:
+             update_status(file_id, "Processing", f"Downloading logic: {line[:50]}...")
+
+    process.wait()
+    
+    if process.returncode != 0:
+        details = "Process failed. Check logs."
         print(f"CLI Error: {details}")
-        raise RuntimeError(f"Mashup generation failed: {details}")
+        raise RuntimeError(f"Mashup generation failed with code {process.returncode}")
     print(f"CLI completed successfully: {output_file}")
 
 
@@ -268,7 +292,7 @@ def process_mashup_request(singer_name, number_of_videos, audio_duration, email,
         # We generate a .mp4 for the preview
         output_file = temp_dir / file_id
         
-        run_cli_mashup(singer_name, number_of_videos, audio_duration, output_file)
+        run_cli_mashup(singer_name, number_of_videos, audio_duration, output_file, file_id)
         
         if output_file.exists():
             update_status(file_id, "Processing", "Creating zip and sending email...")

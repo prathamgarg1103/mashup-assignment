@@ -103,6 +103,7 @@ def download_videos(singer_name: str, number_of_videos: int, download_dir: Path)
              raise RuntimeError(f"Could not download any videos for {singer_name}.")
         print(f"Warning: Only downloaded {len(downloaded)} videos.")
     
+    print(f"[PROGRESS] Downloaded {len(downloaded)} videos")
     return downloaded[:number_of_videos]
 
 
@@ -140,10 +141,13 @@ def create_merged_video(files: List[Path], audio_duration: int, output_path: Pat
             raise RuntimeError("No valid audio clips to merge.")
 
         print(f"Merging {len(clips)} audio clips...")
+        print(f"[PROGRESS] Merging {len(clips)} audio clips...")
         final_audio = concatenate_audioclips(clips)
         
         # Create video
+        # Create video
         print("Creating video file...")
+        print("[PROGRESS] Creating video file...")
         # Use a simple color background (blue-ish) or generate one
         # 720p resolution
         try:
