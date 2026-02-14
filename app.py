@@ -126,7 +126,7 @@ FORM_HTML = """
       <button type="submit">Create and Email Mashup</button>
     </form>
     {% if message %}
-      <div class="msg {{ status }}">{{ message }}</div>
+      <div class="msg {{ status }}">{{ message|safe }}</div>
     {% endif %}
   </div>
 </body>
