@@ -91,6 +91,7 @@ def download_videos(singer_name: str, number_of_videos: int, download_dir: Path)
     }
 
     with YoutubeDL(ydl_options) as ydl:
+        query = f"ytsearch{number_of_videos}:{singer_name}"
         ydl.extract_info(query, download=True)
 
     downloaded = sorted(
