@@ -251,9 +251,17 @@ def send_email_with_attachment(
 STATIC_RESULTS_DIR = Path("static_results")
 STATIC_RESULTS_DIR.mkdir(exist_ok=True)
 
+def update_status(file_id, status, message=""):
+    """Write status to a file for the frontend to poll."""
+    status_file = STATIC_RESULTS_DIR / f"{file_id}.txt"
+    with open(status_file, "w") as f:
+        f.write(f"{status}|{message}")
+
 def process_mashup_request(singer_name, number_of_videos, audio_duration, email, file_id):
     """Background task to run mashup and email result."""
     temp_dir = Path(tempfile.mkdtemp(prefix="mashup_web_"))
+    update_status(file_id, "Processing", "Starting download and processing...")
+    
     try:
         print(f"Processing request for {email} / {singer_name}")
         
@@ -263,6 +271,7 @@ def process_mashup_request(singer_name, number_of_videos, audio_duration, email,
         run_cli_mashup(singer_name, number_of_videos, audio_duration, output_file)
         
         if output_file.exists():
+            update_status(file_id, "Processing", "Creating zip and sending email...")
             # 1. Create ZIP for email
             zip_file = create_zip_file(output_file)
             send_email_with_attachment(
@@ -276,53 +285,90 @@ def process_mashup_request(singer_name, number_of_videos, audio_duration, email,
             # 2. Move MP4 to static folder for preview
             shutil.move(str(output_file), str(STATIC_RESULTS_DIR / file_id))
             print(f"Video available at {STATIC_RESULTS_DIR / file_id}")
+            update_status(file_id, "Done", "Mashup created and emailed successfully!")
             
         else:
              print("Error: Output file was not created by CLI.")
+             update_status(file_id, "Failed", "Output file was not created by CLI logic.")
 
     except Exception as exc:
         print(f"Background processing error: {exc}")
+        update_status(file_id, "Failed", str(exc))
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 @app.route("/result/<filename>")
 def result(filename):
-    """Serve the result page with video player."""
-    # Security check: filename must be simple
+    """Serve the result page with video player and status."""
     if "/" in filename or "\\" in filename:
         return "Invalid filename", 400
     
+    status_file = STATIC_RESULTS_DIR / f"{filename}.txt"
+    current_status = "Processing"
+    details = "Waiting for update..."
+
+    if status_file.exists():
+        try:
+            with open(status_file, "r") as f:
+                content = f.read().strip().split("|", 1)
+                current_status = content[0]
+                if len(content) > 1:
+                    details = content[1]
+        except:
+            pass
+            
+    # Auto-refresh meta tag if processing
+    refresh_tag = '<meta http-equiv="refresh" content="5">' if current_status == "Processing" else ""
+
     return render_template_string("""
     <!doctype html>
     <html lang="en">
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1">
-      <title>Mashup Ready</title>
+      {{ refresh_tag|safe }}
+      <title>Mashup Status</title>
       <style>
         body { font-family: Arial, sans-serif; background: #f1f5f9; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
         .container { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center; max-width: 800px; width: 90%; }
         h1 { color: #0f172a; margin-bottom: 20px; }
+        .status { font-size: 18px; margin-bottom: 20px; font-weight: bold; }
+        .Processing { color: #d97706; }
+        .Failed { color: #dc2626; }
+        .Done { color: #16a34a; }
         video { width: 100%; border-radius: 8px; margin-top: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
         .btn { display: inline-block; margin-top: 20px; padding: 12px 24px; background: #0ea5e9; color: white; text-decoration: none; border-radius: 6px; font-weight: bold; }
         .btn:hover { background: #0284c7; }
+        pre { background: #fee2e2; padding: 10px; border-radius: 6px; overflow-x: auto; text-align: left; }
       </style>
     </head>
     <body>
       <div class="container">
-        <h1>Your Mashup is Ready! 🎵</h1>
-        <p>It has been emailed to you. You can also watch a preview here:</p>
-        <video controls autoplay>
-            <source src="/download/{{ filename }}" type="video/mp4">
-            Your browser does not support the video tag.
-        </video>
+        <h1>Mashup Status</h1>
+        
+        <div class="status {{ status }}">Status: {{ status }}</div>
+        <p>{{ details }}</p>
+
+        {% if status == 'Done' %}
+            <video controls autoplay>
+                <source src="/download/{{ filename }}" type="video/mp4">
+                Your browser does not support the video tag.
+            </video>
+        {% elif status == 'Failed' %}
+            <p>Something went wrong. Please check the error above.</p>
+        {% else %}
+            <p>Please wait...</p>
+            <div style="margin: 20px auto; border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 30px; height: 30px; animation: spin 2s linear infinite;"></div>
+            <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
+        {% endif %}
+
         <br>
-        <a href="/" class="btn">Create Another</a>
+        <a href="/" class="btn">Back to Home</a>
       </div>
     </body>
     </html>
-    """, filename=filename)
+    """, filename=filename, status=current_status, details=details, refresh_tag=refresh_tag)
 
 @app.route("/download/<path:filename>")
 def download_file(filename):
