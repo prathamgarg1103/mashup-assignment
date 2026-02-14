@@ -189,16 +189,21 @@ def run_cli_mashup(singer_name: str, number_of_videos: int, audio_duration: int,
     process = subprocess.Popen(
         command, 
         stdout=subprocess.PIPE, 
-        stderr=subprocess.STDOUT, 
+        stderr=subprocess.PIPE, 
         text=True, 
         bufsize=1, 
         universal_newlines=True
     )
 
-    # Read output line by line
+    # Collect all output
+    stdout_lines = []
+    stderr_lines = []
+    
+    # Read stdout line by line
     for line in process.stdout:
         line = line.strip()
         if not line: continue
+        stdout_lines.append(line)
         print(f"CLI: {line}") # Log to console
         
         # Check for progress tags
@@ -208,12 +213,23 @@ def run_cli_mashup(singer_name: str, number_of_videos: int, audio_duration: int,
         elif "Downloading" in line and file_id:
              update_status(file_id, "Processing", f"Downloading logic: {line[:50]}...")
 
+    # Read any stderr
+    stderr_output = process.stderr.read() if process.stderr else ""
+    
     process.wait()
     
     if process.returncode != 0:
-        details = "Process failed. Check logs."
-        print(f"CLI Error: {details}")
-        raise RuntimeError(f"Mashup generation failed with code {process.returncode}")
+        # Collect error details
+        error_lines = []
+        if stderr_output:
+            error_lines.append(stderr_output[:500])  # Limit to 500 chars
+        if stdout_lines:
+            # Get last few lines of stdout which often contain the error
+            error_lines.extend(stdout_lines[-3:])
+        
+        error_message = " | ".join(error_lines) if error_lines else "Unknown error"
+        print(f"CLI Error: {error_message}")
+        raise RuntimeError(error_message)
     print(f"CLI completed successfully: {output_file}")
 
 
