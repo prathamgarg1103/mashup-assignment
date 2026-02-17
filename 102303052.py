@@ -80,34 +80,42 @@ def configure_ffmpeg() -> None:
 def download_videos(singer_name: str, number_of_videos: int, download_dir: Path) -> List[Path]:
     from yt_dlp import YoutubeDL
 
-    print(f"Downloading {number_of_videos} videos for: {singer_name}...")
+    print(f"[SEARCH] Searching YouTube for: {singer_name}")
     ydl_options = {
         "format": "bestaudio/best",
         "noplaylist": True,
-        "quiet": True,
-        "no_warnings": True,
+        "quiet": False,
+        "no_warnings": False,
         "ignoreerrors": True,
         "outtmpl": str(download_dir / "%(title).80s-%(id)s.%(ext)s"),
-        "socket_timeout": 20,
-        "connect_timeout": 20,
-        "retries": 3,
-        "fragment_retries": 3,
-        "skip_unavailable_videos": True,
+        "socket_timeout": 10,
+        "connect_timeout": 10,
+        "retries": 1,
+        "http_headers": {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+        },
         "extractor_args": {
             "youtube": {
-                "player_client": ["web", "android"]
+                "player_client": ["web"]
             }
         },
     }
 
-    with YoutubeDL(ydl_options) as ydl:
-        query = f"ytsearch{number_of_videos}:{singer_name}"
-        ydl.extract_info(query, download=True)
+    print(f"[DOWNLOAD] Starting yt_dlp for: ytsearch{number_of_videos}:{singer_name}")
+    try:
+        with YoutubeDL(ydl_options) as ydl:
+            query = f"ytsearch{number_of_videos}:{singer_name}"
+            ydl.extract_info(query, download=True)
+        print(f"[SUCCESS] yt_dlp completed")
+    except Exception as e:
+        print(f"[ERROR] yt_dlp failed: {e}")
+        raise
 
     downloaded = sorted(
         [path for path in download_dir.iterdir() if path.is_file()],
         key=lambda path: path.stat().st_mtime,
     )
+    print(f"[RESULT] Found {len(downloaded)} downloaded files")
     if len(downloaded) < number_of_videos:
         if len(downloaded) == 0:
              raise RuntimeError(f"Could not download any videos for {singer_name}.")
