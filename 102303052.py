@@ -117,14 +117,21 @@ def download_videos(singer_name: str, number_of_videos: int, download_dir: Path)
     print(f"[FOUND] Found {len(video_ids)} videos, downloading...")
     
     ydl_options = {
-        "format": "bestaudio/best",
+        # Prefer formats that usually work without JavaScript signature extraction.
+        "format": "bestaudio[ext=m4a]/bestaudio/best",
         "quiet": False,
         "no_warnings": False,
         "ignoreerrors": True,
+        "noplaylist": True,
         "outtmpl": str(download_dir / "%(title).80s-%(id)s.%(ext)s"),
         "socket_timeout": 10,
         "connect_timeout": 10,
         "retries": 2,
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["android", "web"],
+            }
+        },
         "http_headers": {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         },
@@ -153,7 +160,10 @@ def download_videos(singer_name: str, number_of_videos: int, download_dir: Path)
     print(f"[RESULT] Found {len(downloaded)} downloaded files")
     if len(downloaded) < number_of_videos:
         if len(downloaded) == 0:
-             raise RuntimeError(f"Could not download any videos for {singer_name}.")
+             raise RuntimeError(
+                 f"Could not download any videos for {singer_name}. "
+                 "yt_dlp could not extract playable streams from YouTube."
+             )
         print(f"Warning: Only downloaded {len(downloaded)} videos.")
     
     print(f"[PROGRESS] Downloaded {len(downloaded)} videos")
