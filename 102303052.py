@@ -84,13 +84,17 @@ def download_videos(singer_name: str, number_of_videos: int, download_dir: Path)
     ydl_options = {
         "format": "bestaudio/best",
         "noplaylist": True,
-        "quiet": True,
-        "no_warnings": True,
+        "quiet": False,
+        "no_warnings": False,
         "ignoreerrors": True,
         "outtmpl": str(download_dir / "%(title).80s-%(id)s.%(ext)s"),
+        "socket_timeout": 30,
+        "retries": 5,
+        "fragment_retries": 5,
         "extractor_args": {
             "youtube": {
-                "player_client": ["android", "ios"]
+                "player_client": ["web", "android", "ios"],
+                "skip_unavailable_videos": True
             }
         },
     }
