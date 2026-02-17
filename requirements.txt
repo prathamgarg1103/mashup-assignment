@@ -5,3 +5,4 @@ imageio-ffmpeg
 email-validator
 python-dotenv
 gunicorn
+google-api-python-client

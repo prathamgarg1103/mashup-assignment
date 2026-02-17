@@ -79,38 +79,68 @@ def configure_ffmpeg() -> None:
 
 def download_videos(singer_name: str, number_of_videos: int, download_dir: Path) -> List[Path]:
     from yt_dlp import YoutubeDL
-
+    from googleapiclient.discovery import build
+    
     print(f"[SEARCH] Searching YouTube for: {singer_name}")
+    
+    # Get YouTube API key from environment
+    youtube_api_key = os.getenv("YOUTUBE_API_KEY")
+    if not youtube_api_key:
+        raise RuntimeError("YOUTUBE_API_KEY environment variable not set. Please set it in your deployment config.")
+    
+    print(f"[API] Using YouTube Data API to search")
+    try:
+        youtube = build("youtube", "v3", developerKey=youtube_api_key)
+        search_request = youtube.search().list(
+            q=singer_name,
+            part="snippet",
+            type="video",
+            maxResults=number_of_videos,
+            relevanceLanguage="en",
+            order="relevance"
+        )
+        search_response = search_request.execute()
+    except Exception as e:
+        print(f"[ERROR] YouTube API search failed: {e}")
+        raise RuntimeError(f"YouTube API error: {e}")
+    
+    video_ids = []
+    for item in search_response.get("items", []):
+        video_ids.append(item["id"]["videoId"])
+    
+    if not video_ids:
+        raise RuntimeError(f"No videos found for {singer_name} using YouTube API")
+    
+    print(f"[FOUND] Found {len(video_ids)} videos, downloading...")
+    
     ydl_options = {
         "format": "bestaudio/best",
-        "noplaylist": True,
         "quiet": False,
         "no_warnings": False,
         "ignoreerrors": True,
         "outtmpl": str(download_dir / "%(title).80s-%(id)s.%(ext)s"),
         "socket_timeout": 10,
         "connect_timeout": 10,
-        "retries": 1,
-        "no_check_certificates": True,
+        "retries": 2,
         "http_headers": {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         },
-        "extractor_args": {
-            "youtube": {
-                "player_client": ["web_embedded"],
-                "skip_unavailable_videos": True
-            }
-        },
     }
 
-    print(f"[DOWNLOAD] Starting yt_dlp for: ytsearch{number_of_videos}:{singer_name}")
+    print(f"[DOWNLOAD] Starting download with yt_dlp")
     try:
         with YoutubeDL(ydl_options) as ydl:
-            query = f"ytsearch{number_of_videos}:{singer_name}"
-            ydl.extract_info(query, download=True)
+            for i, vid_id in enumerate(video_ids, 1):
+                url = f"https://www.youtube.com/watch?v={vid_id}"
+                print(f"[DOWNLOAD] {i}/{len(video_ids)}: {url}")
+                try:
+                    ydl.extract_info(url, download=True)
+                except Exception as e:
+                    print(f"[SKIP] Failed to download {vid_id}: {e}")
+                    continue
         print(f"[SUCCESS] yt_dlp completed")
     except Exception as e:
-        print(f"[ERROR] yt_dlp failed: {e}")
+        print(f"[ERROR] Download failed: {e}")
         raise
 
     downloaded = sorted(
