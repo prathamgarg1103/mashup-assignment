@@ -19,3 +19,5 @@ services:
         sync: false
       - key: SENDER_EMAIL
         sync: false
+      - key: YOUTUBE_API_KEY
+        sync: false

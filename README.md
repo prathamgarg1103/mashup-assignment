@@ -45,6 +45,7 @@ A robust Python application that creates a mashup of songs from a specific singe
     SENDER_EMAIL=your_email@gmail.com
     SMTP_HOST=smtp.gmail.com
     SMTP_PORT=587
+    YOUTUBE_API_KEY=your_youtube_api_key_here
     ```
 
 ### Usage
@@ -81,6 +82,7 @@ Render supports long-running background tasks, which are essential for processin
     - `SENDER_EMAIL`: (Your Email)
     - `SMTP_HOST`: `smtp.gmail.com`
     - `SMTP_PORT`: `587`
+    - `YOUTUBE_API_KEY`: (Your YouTube Data API key)
 
 ### ⚠️ Method 2: Vercel
 **Note**: Vercel has a 10s timeout for serverless functions. This app may fail to process large mashups on Vercel.
