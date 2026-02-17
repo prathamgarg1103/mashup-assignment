@@ -94,6 +94,7 @@ def download_videos(singer_name: str, number_of_videos: int, download_dir: Path)
         "http_headers": {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
         },
+        "cookies_from_browser": ("chrome",),
         "extractor_args": {
             "youtube": {
                 "player_client": ["web"]
