@@ -184,53 +184,53 @@ def run_cli_mashup(singer_name: str, number_of_videos: int, audio_duration: int,
     ]
     # Capture output for debugging logs if needed
     print(f"Starting CLI command: {' '.join(command)}")
+    update_status(file_id, "Processing", f"Downloading {number_of_videos} videos for {singer_name}...")
     
-    # Use Popen to stream output
-    process = subprocess.Popen(
-        command, 
-        stdout=subprocess.PIPE, 
-        stderr=subprocess.PIPE, 
-        text=True, 
-        bufsize=1, 
-        universal_newlines=True
-    )
-
-    # Collect all output
-    stdout_lines = []
-    stderr_lines = []
-    
-    # Read stdout line by line
-    for line in process.stdout:
-        line = line.strip()
-        if not line: continue
-        stdout_lines.append(line)
-        print(f"CLI: {line}") # Log to console
+    try:
+        # Use communicate with timeout to prevent hanging
+        process = subprocess.Popen(
+            command, 
+            stdout=subprocess.PIPE, 
+            stderr=subprocess.PIPE, 
+            text=True, 
+            bufsize=1
+        )
         
-        # Check for progress tags
-        if "[PROGRESS]" in line and file_id:
-            msg = line.replace("[PROGRESS]", "").strip()
-            update_status(file_id, "Processing", msg)
-        elif "Downloading" in line and file_id:
-             update_status(file_id, "Processing", f"Downloading logic: {line[:50]}...")
-
-    # Read any stderr
-    stderr_output = process.stderr.read() if process.stderr else ""
-    
-    process.wait()
-    
-    if process.returncode != 0:
-        # Collect error details
-        error_lines = []
-        if stderr_output:
-            error_lines.append(stderr_output[:500])  # Limit to 500 chars
-        if stdout_lines:
-            # Get last few lines of stdout which often contain the error
-            error_lines.extend(stdout_lines[-3:])
+        try:
+            stdout_data, stderr_data = process.communicate(timeout=1200)  # 20 minute timeout
+        except subprocess.TimeoutExpired:
+            process.kill()
+            raise RuntimeError(f"YouTube download timed out after 20 minutes. Try fewer videos.")
         
-        error_message = " | ".join(error_lines) if error_lines else "Unknown error"
-        print(f"CLI Error: {error_message}")
-        raise RuntimeError(error_message)
-    print(f"CLI completed successfully: {output_file}")
+        # Parse and log output
+        if stdout_data:
+            for line in stdout_data.split('\n'):
+                line = line.strip()
+                if not line:
+                    continue
+                print(f"CLI: {line}")
+                if "[PROGRESS]" in line and file_id:
+                    msg = line.replace("[PROGRESS]", "").strip()
+                    update_status(file_id, "Processing", msg)
+        
+        if process.returncode != 0:
+            error_msg = stderr_data[:300] if stderr_data else "Unknown error"
+            print(f"CLI Error (exit code {process.returncode}): {error_msg}")
+            # Try to extract meaningful error from output
+            if "Could not download" in stdout_data:
+                raise RuntimeError(f"YouTube: No videos found for '{singer_name}'. Try a different singer or check spelling.")
+            elif "403" in stdout_data or "429" in stdout_data:
+                raise RuntimeError("YouTube blocked the request. Try again in a few minutes or with fewer videos.")
+            else:
+                raise RuntimeError(error_msg)
+        
+        print(f"CLI completed successfully: {output_file}")
+    
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("Download process timed out. Try with fewer videos.")
+    except Exception as e:
+        print(f"CLI execution error: {e}")
+        raise
 
 
 def send_email_with_attachment(
