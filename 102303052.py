@@ -91,13 +91,14 @@ def download_videos(singer_name: str, number_of_videos: int, download_dir: Path)
     print(f"[API] Using YouTube Data API to search")
     try:
         youtube = build("youtube", "v3", developerKey=youtube_api_key)
+        # Request both id and snippet so we always get videoId
         search_request = youtube.search().list(
             q=singer_name,
-            part="snippet",
+            part="id,snippet",
             type="video",
             maxResults=number_of_videos,
             relevanceLanguage="en",
-            order="relevance"
+            order="relevance",
         )
         search_response = search_request.execute()
     except Exception as e:
@@ -106,7 +107,9 @@ def download_videos(singer_name: str, number_of_videos: int, download_dir: Path)
     
     video_ids = []
     for item in search_response.get("items", []):
-        video_ids.append(item["id"]["videoId"])
+        vid = item.get("id", {}).get("videoId")
+        if vid:
+            video_ids.append(vid)
     
     if not video_ids:
         raise RuntimeError(f"No videos found for {singer_name} using YouTube API")
