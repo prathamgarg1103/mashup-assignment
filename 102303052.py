@@ -91,13 +91,14 @@ def download_videos(singer_name: str, number_of_videos: int, download_dir: Path)
         "socket_timeout": 10,
         "connect_timeout": 10,
         "retries": 1,
+        "no_check_certificates": True,
         "http_headers": {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         },
-        "cookies_from_browser": ("chrome",),
         "extractor_args": {
             "youtube": {
-                "player_client": ["web"]
+                "player_client": ["web_embedded"],
+                "skip_unavailable_videos": True
             }
         },
     }
